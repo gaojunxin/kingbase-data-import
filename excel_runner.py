@@ -5,291 +5,179 @@ import datetime
 import os
 import json
 import string
+import pandas as pd
+from pandas import concat
 
 from openpyxl import load_workbook
 import logging
-import psycopg2
 from io import StringIO
+
+from db_tools import DBTools
 
 
 class ExcelRunner:
-    def __init__(self, db_config) -> None:
-        self.db_host = db_config['host']
-        self.db_port = db_config['port']
-        self.db_user = db_config['user']
-        self.db_password = db_config['password']
-        self.db_dbname = db_config['dbname']
-        self.schema_name = db_config['schema_name']
-        self.dict_data = {}
+    def __init__(self, task_config, database, logger, dict_tables, dict_id_map, dict_name_map) -> None:
+        self.task_config = task_config
+        self.database = database
+        self.dict_name_map = dict_name_map
+        self.dict_id_map = dict_id_map
+        self.logger = logger
+        self.dict_tables = dict_tables
+
+        db = task_config['db']
+        self.dbtools = DBTools(logger, database[db])
+
+        self.file_path = task_config['excel_file']
+        self.base_columns = task_config['base_column']
+        self.default_column = task_config['default_column']
+
+        self.base_table = task_config['base_table']
+        self.extend_table = task_config['extend_table']
+        self.current_id = 0
     def get_connection(self):
-        return psycopg2.connect(
-            host=self.db_host,
-            port=self.db_port,
-            user=self.db_user,
-            password=self.db_password,
-            database=self.db_dbname,
-            options=f"-c search_path={self.schema_name}"
-        )
+        return self.dbtools.get_connection()
 
-    # 根据表名查询字典表数据
-    def get_type_dict(self, table_name, id_field, name_field):
-        sql = f'select {id_field}, {name_field} from "{self.schema_name}"."{table_name}"'
-        with self.get_connection() as conn:
-            with conn.cursor() as cursor:
-                try:
-                    cursor.execute(sql)
-                    result = cursor.fetchall()
-                    type_dcit = {}
-                    for item in result :
-                        type_dcit[item[1]] = {
-                            "id" : item[0],
-                            "name" : item[1]
-                        }
-                    return type_dcit
-                except Exception as e:
-                    logging.error(f"查询字典[{table_name}]数据失败", exc_info=True)
+    def remove_prefix(self, text, prefix):
+        if text.startswith(prefix):
+            return text[len(prefix):]
+        return text
+    
+    def add_prefix(self, text, prefix):
+        if text is not None and type(text) == 'str' and not text.startswith(prefix):
+            return prefix+text
+        return text
+    # 将源表的数据清晰为目标表的格式
+    def convert_sheet(self, sheet_name, df):
 
-    # 清空表数据
-    def truncate_table(self, table_name):
-        sql = f'TRUNCATE TABLE "{self.schema_name}"."{table_name}"'
-        with self.get_connection() as conn:
-            with conn.cursor() as cursor:
-                try:
-                    cursor.execute(sql)
-                    conn.commit()
-                except Exception as e:
-                    logging.error(f"清空[{table_name}]数据失败", exc_info=True)
-    # 插入基础数据
-    def insert_base_data(self, data, task_config):
-        table_name = task_config['base_table']
-        base_column = task_config['base_column']
-        default_column = task_config['default_column']
-        fk_id_column = task_config['fk_id_column']
-        col_names = ""
-        col_values = ""
+        base_column_names = []
+        rname_config = {}
+        id_vars = []
+        ext_rename_config = {'value': 'field_value', 'variable': 'field_name'}
+        # 基础字段名字从中文描述修改为数据库字段名
+        for column in self.base_columns:
+            name = column['name']
+            index = column.get('index', None)
+            if index is not None:
+                caption = df.columns[index]
+                base_column_names.append(name)
+                rname_config[caption] = name
 
-        # 清空表数据
-        self.truncate_table(table_name)
+        df = df.rename(columns=rname_config)
 
-        # 拼接基础字段
-        for column_info in base_column:
-            col_name = column_info['name']
-            col_names = col_names + f'"{col_name}",'
-            col_values = col_values + f'%({col_name})s,'               
+        # 初始化基础字段
+        for base_column_item in self.base_columns:
+            mode = base_column_item.get('mode', '')
+            col_name = base_column_item['name']
+            to_col_name = base_column_item.get('to', '')
+            from_column_name = base_column_item.get('from', '')
+            dict_table = base_column_item.get('dict','')
+            value_prefix = base_column_item.get('value_prefix',None)
+            has_column = from_column_name in df.columns
+            if mode is not None:
+                if mode == 'type_code':
+                    if sheet_name == '陆岸设施':
+                        sheet_name = '陆岸终端'
+                    elif sheet_name == '水下生产系统':
+                        sheet_name = '水下生产装置'
+                    elif sheet_name == '发电机组':
+                        sheet_name = '电气设备'
+                    df[col_name] = self.dict_name_map['epfaclas_term'][sheet_name]
+                    base_column_names.append(col_name)
+                elif mode == 'type_name':
+                    df[col_name] = sheet_name
+                    base_column_names.append(col_name)
+                elif mode == 'id2name':
+                    if has_column:
+                        if value_prefix is not None:
+                            df[col_name] = df[from_column_name].map(lambda x: self.remove_prefix(self.dict_id_map[dict_table].get(x, x), value_prefix))
+                        else:
+                            df[col_name] = df[from_column_name].map(self.dict_id_map[dict_table])
+                        base_column_names.append(col_name)
+                elif mode == 'name2id':
+                    if has_column:
+                        if value_prefix is not None:
+                            df[col_name] = df[from_column_name].map(lambda x: self.add_prefix(self.dict_name_map[dict_table].get(x, x), value_prefix))
+                        else:
+                            df[col_name] = df[from_column_name].map(self.dict_name_map[dict_table])
+                        base_column_names.append(col_name)
+                elif mode == 'copy':
+                    id_vars.append(col_name)
+                    ext_rename_config[col_name] = to_col_name
+                    base_column_names.append(col_name)
+
+        # 处理默认字段
+        for column_item in self.default_column:
+            col_name = column_item['name']
+            value = column_item['value']
+            df[col_name] = value
+            base_column_names.append(col_name)
         
-        # 拼接默认字段
-        for column_info in default_column:
-            col_name = column_info['name']
-            col_names = col_names + f'"{col_name}",'
-            col_values = col_values + f'%({col_name})s,'
+        df_length = len(df)
+        df['id'] = range(self.current_id + 1, self.current_id + df_length + 1)
+        self.current_id += df_length
 
-        # 拼接外键字段
-        for column_info in fk_id_column:
-            col_name = column_info['name']
-            col_names = col_names + f'"{col_name}",'
-            col_values = col_values + f'%({col_name})s,'
+        # 截取基础字段
+        base_datas = df[list(set(base_column_names))]
 
-        sql = f'''
-        INSERT INTO "{self.schema_name}"."{table_name}" (
-        {col_names[:-1]})
-        VALUES( {col_values[:-1]}
-        );
+        # 截取扩展字段
+        ext_columns = set(df.columns) - set(base_column_names) | set(id_vars)
+        ext_datas = df[list(ext_columns)]
 
-        '''
-
-        self.insert_data(sql, data)
-
-
-    # 插入扩展数据
-    def insert_ext_data(self, data, task_config):
-        extend_table = task_config['extend_table']
-        ext_column = task_config['ext_column']
-
-        # 清空表数据
-        self.truncate_table(extend_table)
+        self.logger.debug("基础字段：\n%s", base_datas)
+        self.logger.debug("扩展字段：\n%s", ext_datas)
         
-        col_names = ""
-        col_values = ""
-        for column_info in ext_column:
-            col_name = column_info['name']
-            col_names = col_names + f'"{col_name}",'
-            col_values = col_values + f'%({col_name})s,'
-        sql = f'''
-        INSERT INTO "{self.schema_name}"."{extend_table}" ( 
-        {col_names[:-1]} )
-        VALUES(
-        {col_values[:-1]} 
-        );
+        # 使用 pd.melt() 将列转换为行
+        value_vars = ext_datas.columns.difference(id_vars)
+        melted_df = pd.melt(ext_datas, id_vars=id_vars, value_vars=value_vars)
 
-        '''
-        self.insert_data(sql, data)
+        melted_df = melted_df.rename(columns=ext_rename_config)
 
-
-    # 插入数据公共方法
-    def insert_data(self, sql, data):
-        print(sql)
-        with self.get_connection() as conn:
-            with conn.cursor() as cursor:
-                try:
-                    conn.autocommit = False
-                    cursor.execute("BEGIN;")
-                    cursor.executemany(sql, data)
-                    conn.commit()
-                except Exception as e:
-                    conn.rollback()
-                    logging.error("执行executemany失败", exc_info=True)
-                finally:
-                    # conn.autocommit = True
-                    pass
-
-
-    # 快速插入扩展数据
-    def fast_insert_ext_data(self, data, task_config):
-        extend_table = task_config['extend_table']
-        ext_column = task_config['ext_column']
-        
-        col_names = []
-        for column_info in ext_column:
-            col_name = column_info['name']
-            col_names.append(col_name)
-
-        # 将字典列表转换为CSV格式的字符串
-        csv_data = '' 
-        for row in data:
-            row_str = ''
-            for col_name in col_names:
-                col_value = row[col_name]
-                if type(col_value) == str and any(char in string.punctuation for char in col_value):
-                    row_str = row_str + f'"{col_value}",'
-                else:
-                    row_str = row_str + f'{col_value},'
-            csv_data = csv_data + row_str[:-1] + '\n'
-
-        # 连接到数据库
-        with self.get_connection() as conn:
-            with conn.cursor() as cur:
-                try:
-                    conn.autocommit = False
-                    # 开启事务
-                    cur.execute("BEGIN;")
-                    # 创建一个内存中的CSV文件对象
-                    csv_file = StringIO(csv_data)
-                    with open('output.csv', 'w', newline='', encoding='utf-8') as file:
-                        # 写入数据到文件，注意我们直接使用getvalue()获取StringIO中的字符串内容
-                        file.write(csv_file.getvalue())
-                    # 使用copy_from方法批量导入数据
-                    cur.copy_from(csv_file, f'{extend_table}', sep=',', null='', columns=col_names)
-
-                    # 提交事务
-                    conn.commit()
-
-                except Exception as e:
-                    # 如果发生错误，则回滚事务
-                    conn.rollback()
-                    print(f"An error occurred: {e}")
-
-
-    # 初始化字典表
-    def init_dict(self, task_config):
-        for dict_info in task_config['dict_tables']:
-            table_name = dict_info['name']
-            id_field = dict_info['id_field']
-            name_field = dict_info['name_field']
-            data = self.get_type_dict(table_name, id_field, name_field)
-            self.dict_data[table_name] = data
+        self.logger.debug("列转行后的结果：\n%s", melted_df)
+        return base_datas, melted_df
     # 执行任务
-    def run_task(self, task_id, task_config):
-        print('正在执行：', task_config.get('title', task_id))
-        self.init_dict(task_config)
-        file_path = task_config['excel_file']
-        base_column = task_config['base_column']
-        fk_id_column = task_config['fk_id_column']
-        ext_column = task_config['ext_column']
-        default_column = task_config['default_column']
+    def run(self, task_id):
+        self.logger.info('正在执行：%s', self.task_config.get('title', task_id))
 
-        workbook = load_workbook(file_path)
-        sheet_names = workbook.sheetnames
-        row_num = 0
+        # 读取 Excel 文件
+        all_sheets_df = pd.read_excel(self.file_path, sheet_name=None, engine='openpyxl')
+        all_base_datas = []
+        all_ext_datas = []
+        # 遍历所有 sheet
+        for sheet_name, df in all_sheets_df.items():
+            self.logger.info('正在处理：%s', sheet_name)
+            [base_datas, ext_datas]  = self.convert_sheet(sheet_name, df)
+            all_base_datas.append(base_datas)
+            all_ext_datas.append(ext_datas)
+       
+        final_base_datas = concat(all_base_datas)
+        final_ext_datas = concat(all_ext_datas)
+        final_ext_datas['id'] = range(1, len(final_ext_datas) + 1)
+        final_ext_datas['del_flag'] = 0
 
-        base_data = [] 
-        ext_data = [] 
+        self.logger.info("数据梳理完毕，等待写入数据库...")
+        self.logger.debug("基础字段表：\n%s", final_base_datas)
+        self.logger.debug("扩展字段表：\n%s", final_ext_datas)
+
+        self.logger.info("正在清空表...")
+        clear_tables = self.task_config.get('clear_table', None)
+        if clear_tables is not None:
+            for table_item in clear_tables:
+                table_name = table_item.get('name', None)
+                if table_name is not None:
+                    self.dbtools.truncate_table(table_name)
+                    self.logger.info(f"清空表{table_name}完成")
+        self.logger.info("所有表清空完成")
 
 
-        for sheet_name in sheet_names:
-            print('正在处理sheet页：', sheet_name)
-            sheet = workbook[sheet_name]
-            base_column_max_index = max(base_column, key=lambda x: x.get('index', 0))['index']
+        engine = self.dbtools.create_engine()
+        schema_name = self.dbtools.get_schema_name()
+        final_base_datas.to_sql(name=f'{self.base_table}', schema=schema_name, if_exists="append", con=engine, index=False)
+        self.logger.info(f"写入[基础字段表]: {self.base_table} 数据完成")
 
-            # 扩展列名称数组
-            ext_col_names = []
-            first_row_data = [cell.value for cell in sheet[1]]
-            for ext_col_num in range(base_column_max_index, len(first_row_data)):
-                    ext_col_name = first_row_data[ext_col_num]
-                    if ext_col_name:
-                        ext_col_names.append(ext_col_name)
+        final_ext_datas.to_sql(name=f'{self.extend_table}', schema=schema_name, if_exists="append", con=engine, index=False)
+        self.logger.info(f"写入[扩展字段表]: {self.extend_table} 数据完成")
             
+        self.logger.info('任务[%s]处理完成!', self.task_config.get('title', task_id))
+        self.logger.info("\n---\n")
 
-            # 遍历sheet页中的行
-            for row in sheet.iter_rows(min_row=2, values_only=True):
-                
-                eqled_term_info = {}
-                eqled_term_info["id"] = row_num
-
-                # 设置基础字段
-                for column_item in base_column:
-                    name = column_item['name']
-                    index = column_item['index']
-                    eqled_term_info[name] = row[index]
-                    # print(col_name, "=>",row[col_list.index(col_name)] )
-
-                # 设置默认字段
-                for column_info in default_column:
-                    col_name = column_info['name']
-                    if column_info.__contains__('value'):
-                        col_value = column_info['value']
-                        if(col_value == 'sheet_name'):
-                            eqled_term_info[col_name] = sheet_name
-                            continue
-                        eqled_term_info[col_name] = col_value
-                
-                # 设置外键编号字段
-                for column_info in fk_id_column:
-                    col_name = column_info['name']
-                    name_field = column_info['name_field']
-                    dict_table = column_info['dict_table']
-                    value_prefix = column_info.get('value_prefix', '')
-                    try:
-                        name_value = eqled_term_info[name_field]
-                        fk_id_value = self.dict_data[dict_table][value_prefix + name_value]
-                        eqled_term_info[col_name] = fk_id_value['id']
-                    except:
-                        eqled_term_info[col_name] = ''
-                        continue
-
-                base_data.append(eqled_term_info) 
-
-                ################################基础字典完，开始扩展字段初始化#################################
-                ext_col_count = 0 
-                for ext_col_num in range(base_column_max_index, len(first_row_data)):
-                    if ext_col_count < len(ext_col_names):
-                        ext_col_value = {}   
-                        for ext_col_info in ext_column:
-                            col_name = ext_col_info['name']
-                            col_value = ext_col_info['value']
-                            if eqled_term_info.__contains__(col_name):
-                                value = eqled_term_info[col_name]
-                            if  col_value == 'name':
-                                value = ext_col_names[ext_col_count]
-                            elif col_value == 'value':
-                                value = row[ext_col_num]
-                            else:
-                                value = col_value
-                            ext_col_value[col_name] = value
-                        ext_data.append(ext_col_value)
-                        ext_col_count = ext_col_count + 1
-                row_num = row_num + 1
-        
-        print("正在插入基础数据...")
-        self.insert_base_data(base_data, task_config)
-        print("正在插入扩展数据...")
-        self.insert_ext_data(ext_data, task_config)
+      

@@ -1,0 +1,201 @@
+tasks:
+# 设备主数据导入任务
+  equipment_m_1:
+    title: 设备主数据导入任务
+    order: 2
+    db: demo
+    source_db: standard
+    # 任务类型
+    type: table
+    # 是否激活
+    active: false
+    # 是否打印字段配置
+    generate_column: false
+    # 设备主数据基础信息表
+    base_table: xxx_m_data_temp
+    # 扩展信息表
+    extend_table: xxx_ext_m_data_temp
+    # 扩展字段配置
+    extend_config_table: eqfactype_ext_field_conf_temp
+
+    # 在插入数据前清空表
+    clear_table:
+      - name: xxx_m_data_temp
+      - name: xxx_ext_m_data_temp
+
+    # 最后根据右表更新当前表的字段
+    update_column:
+      # 根据所属设置更新油气田等信息
+      - xxx_of_fac_code:
+        columns:
+          - name: xxx_bo_code
+            from: xxx_bo_code
+
+          - name: xxx_bo_name
+            from: xxx_bo_name
+
+          - name: xxx_oper_code
+            from: xxx_oper_code
+
+          - name: xxx_oper_name
+            from: xxx_oper_name
+
+          - name: xxx_ogf_code
+            from: xxx_ogf_code
+
+          - name: xxx_ogf_name
+            from: xxx_ogf_name
+
+          - name: xxx_of_fac_name
+            from: xxx_name
+        # 连接的右表
+        right_table:
+          # 右表的名字
+            name: xxx_m_data_temp
+            # 当前表与右表关联的字段
+            current_on: xxx_of_fac_code
+            # 右表的关联字段
+            right_on: asset_code
+      # 更新排序字段
+      - order_column:
+        columns:
+          - name: order_type
+            from: sort
+        # 连接的右表
+        right_table:
+          # 右表的名字
+            name: epfaclas_term
+            # 当前表与右表关联的字段
+            current_on: xxx_type_code
+            # 右表的关联字段
+            right_on: id
+      # 更新所属系统字段
+      - belong_system_column:
+        columns:
+          - name: belong_system
+            from: belong_system
+        # 连接的右表
+        right_table:
+          # 右表的名字
+            name: equipment_view
+            # 当前表与右表关联的字段
+            current_on: xxx_code
+            # 右表的关联字段
+            right_on: xxx_term_code
+    # 默认字段
+    default_column:
+      - name: create_by
+        value: 1
+      - name: update_by
+        value: 1
+      - name: status
+        value: '0'
+      - name: del_flag
+        value: '0'
+      - name: creator_cocode
+        value: '3DC1B33E1B5B431E99FA163BF9E86E6A'
+      - name: creator_coname
+        value: ''
+    # 设备基础信息列
+    base_column:
+      # 主数据id
+      - name: asset_code
+        mode: copy
+        to: xxx_asset_code
+      # 设备编码
+      - name: xxx_code
+      # 设备名称
+      - name: xxx_name
+        mode: copy
+        to: xxx_name
+      # 设备类型名称
+      - name: xxx_type_name
+        mode: type_name
+      # 设备类型编码
+      - name: xxx_type_code
+        mode: type_code
+      # 所属设施编号
+      - name: xxx_of_fac_code
+      # 所属设施名称
+      - name: xxx_of_fac_name
+      # 所属阶段
+      - name: xxx_of_stage_code
+      # 所属阶段编码
+      - name: xxx_of_stage
+        from: xxx_of_stage_code
+        dict: xeq_business_phase
+        mode: id2name
+    # 表名字，用来和eqfac_type_name做对应
+    table_metadata:
+      table1: '数据表1'
+      table2: '数据表2'
+    # 列信息
+    column_info:
+      table1:
+      - name: table1_id
+        dest: asset_code
+        comment: 数据表1标识
+      - name: branch_id
+        dest: xxx_bo_code
+        comment: 所属分公司
+      - name: business_phase
+        dest: xxx_of_stage_code
+        comment: 所属阶段
+      - name: comp_suction_pressure_design
+        comment: xxx额定出口压力
+      - name: compressor_manufacture
+        comment: xxx生产厂家
+      - name: compressor_model
+        comment: xxx型号
+      - name: compressor_rated_flowrate
+        comment: xxx额定流量
+      - name: equipment_code
+        dest: xxx_code
+        comment: 数据表1编码
+      - name: equipment_name
+        dest: xxx_name
+        comment: 数据表1名称
+      - name: facility_name
+        dest: xxx_of_fac_code
+        comment: 所属xxx名称
+      table2:
+      - name: table2_id
+        dest: asset_code
+        comment: 数据表2标识
+      - name: business_phase
+        dest: xxx_of_stage_code
+        comment: 所属阶段
+      - name: boiler_type
+        is_basic_dic: 0
+        show_type: select
+        dict: xeq_boiler_type
+        comment: xx类型
+      - name: manufacture
+        comment: 生产厂家
+      - name: medium_type
+        is_basic_dic: 0
+        show_type: modal
+        dict: xeq_medium_type
+        comment: xx类型
+      - name: facility_name
+        dest: xxx_of_fac_code
+        comment: 所属设施名称
+      - name: rated_heating_capacity
+        comment: 额定热负荷
+      - name: equipment_code
+        dest: xxx_code
+        comment: 数据表2编码
+      - name: model
+        comment: 型号
+      - name: fuel_type
+        is_basic_dic: 0
+        show_type: modal
+        dict: xeq_fuel_type
+        comment: xx类型
+      - name: equipment_name
+        dest: xxx_name
+        comment: 数据表2名称
+      - name: branch_id
+        dest: xxx_bo_code
+        comment: 所属分公司
+      

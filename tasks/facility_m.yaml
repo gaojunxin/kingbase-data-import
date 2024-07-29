@@ -1,0 +1,148 @@
+# 任务配置
+tasks:
+  # 设施主数据导入任务
+  facility_m:
+    title: 设施主数据导入任务
+    order: 1
+    db: demo
+    source_db: standard
+    # 任务类型
+    type: table
+    # 是否激活
+    active: false
+    # 设施主数据基础信息表
+    base_table: xxx_m_data_temp
+    # 扩展信息表
+    extend_table: xxx_ext_m_data_temp
+    # 扩展字段配置
+    extend_config_table: xxxxx_ext_field_conf_temp
+    # 在插入数据前清空表
+    clear_table:
+      - name: xxx_m_data_temp
+      - name: xxx_ext_m_data_temp
+      - name: xxxxx_ext_field_conf_temp
+    # 默认字段
+    default_column:
+      - name: create_by
+        value: 1
+      - name: update_by
+        value: 1
+      - name: status
+        value: '0'
+      - name: del_flag
+        value: '0'
+      - name: creator_cocode
+        value: '3DC1B33E1B5B431E99FA163BF9E86E6A'
+      - name: creator_coname
+        value: ''
+    # 设施基础信息列
+    base_column:
+      # 主数据id
+      - name: asset_code
+        mode: copy
+        to: xxx_asset_code
+      # 设施编码
+      - name: xxx_code
+      # 设施名称
+      - name: xxx_name
+        mode: copy
+        to: xxx_name
+      # 设施类型名称
+      - name: xxx_type_name
+        mode: type_name
+      # 设备类型编码
+      - name: xxx_type_code
+        mode: type_code
+      # 所属阶段
+      - name: xxx_of_stage_code
+      # 所属阶段编码
+      - name: xxx_of_stage
+        from: xxx_of_stage_code
+        dict: xeq_business_phase
+        mode: id2name
+      - name: xxx_bo_code
+      - name: xxx_ogf_code
+      - name: xxx_oper_code
+      # 分公司名称
+      - name: xxx_bo_name
+        from: xxx_bo_code
+        dict: com_organization
+        mode: id2name
+        value_prefix: "有限"
+      # 油气田名称
+      - name: xxx_ogf_name
+        from: xxx_ogf_code
+        dict: com_ogf_reg
+        mode: id2name
+      # 作业公司名称
+      - name: xxx_oper_name
+        from: xxx_oper_code
+        dict: com_organization
+        mode: id2name
+
+    # 表名字，用来和eqfac_type_name做对应
+    table_metadata:
+      table1: '数据表1'
+      table2: '数据表2'
+    # 列信息
+    column_info:
+      table1:
+      - name: asset_code
+        dest: asset_code
+        comment: 主键
+      - name: branch
+        dest: xxx_bo_code
+        comment: 所属分公司
+      - name: business_phase
+        dest: xxx_of_stage_code
+        comment: xxx
+      - name: drill_repairing_machine_code
+        dest: xxx_code
+        comment: demo编码
+      - name: drill_repairing_machine_model
+        comment: demo型号
+      - name: drill_repairing_machine_name
+        dest: xxx_name
+        comment: demo名称
+      - name: drill_repairing_machine_type
+        is_basic_dic: 0
+        show_type: select
+        dict: xeq_dril_repaire_rig_type
+        comment: demo类型
+      - name: facility_name
+        comment: xxx
+      - name: oil_gas_field
+        dest: xxx_ogf_code
+        comment: xxx
+      - name: operation_zone
+        dest: xxx_oper_code
+        comment: 所属xxx
+      table2:
+      - name: asset_code
+        dest: asset_code
+        comment: 主键
+      - name: operation_zone
+        dest: xxx_oper_code
+        comment: 所属xxx
+      - name: business_phase
+        dest: xxx_of_stage_code
+        comment: 所属阶段
+      - name: fpso_code
+        dest: xxx_code
+        comment: demo装置编码
+      - name: fpso_name
+        dest: xxx_name
+        comment: demo装置名称
+      - name: spm_name
+        comment: 所系单点
+      - name: fpso_type
+        is_basic_dic: 0
+        show_type: select
+        dict: xcm_fps_sys_type
+        comment: demo装置类型
+      - name: branch
+        dest: xxx_bo_code
+        comment: xxx
+      - name: notified_body
+        comment: xxx
+     

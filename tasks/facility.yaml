@@ -1,0 +1,129 @@
+# 任务配置
+tasks:
+  # 设施导入任务  
+  facility:
+    title: 设施导入任务
+    order: 1
+    db: demo
+    # 是否激活
+    active: false
+    # excel文件
+    excel_file: 设施列表20240604.xlsx
+    # 设施基础信息表
+    base_table: xxx_term_temp
+    # 扩展信息表
+    extend_table: xxx_ext_data_temp
+    # 在插入数据前清空表
+    clear_table:
+      - name: xxx_term_temp
+      - name: xxx_ext_data_temp
+    # 默认字段
+    default_column:
+      - name: create_by
+        value: 1
+      - name: update_by
+        value: 1
+      - name: status
+        value: '0'
+      - name: del_flag
+        value: '0'
+      - name: creator_cocode
+        value: '3DC1B33E1B5B431E99FA163BF9E86E6A'
+      - name: creator_coname
+        value: ''
+    # 设施基础信息列
+    base_column:
+      # 分公司名称
+      - name: xxx_term_bo_name
+        index: 0
+      # 作业公司名称
+      - name: xxx_term_oper_name
+        index: 1
+      # 油(气)田名称
+      - name: xxx_term_ogf_name
+        index: 2
+      # 设施编码
+      - name: xxx_term_code
+        index: 3
+      # 设施名称
+      - name: xxx_term_name
+        index: 4
+        mode: copy
+        to: xxx_name
+      # 所属设施名称
+      - name: xxx_term_sbfac_name
+        index: 7
+      # 所属设施编码
+      - name: xxx_term_sbfac_code
+        index: 8
+      #起始设施编码
+      - name: xxx_term_start_facility_id
+        index: 9
+      #起始设施名称
+      - name: xxx_term_start_facility_name
+        index: 10
+      #终止设施编码
+      - name: xxx_term_end_facility_id
+        index: 11
+      #终止设施名称
+      - name: xxx_term_end_facility_name
+        index: 12
+      # 型号
+      - name: xxx_term_model_num
+        index: 13
+      # 生产厂家
+      - name: xxx_term_mfg_name
+        index: 14
+      # 设施原值(万元)
+      - name: xxx_term_val
+        index: 15
+      # 服役到期时间
+      - name: xxx_term_service_expiry
+        index: 16
+      # 投产日期
+      - name: xxx_term_input_date
+        index: 17
+      # 单体区域编码
+      - name: xxx_term_area_code
+        index: 18
+      # 地理信息编码
+      - name: xxx_term_gis_code
+        index: 19
+      # 所属阶段
+      - name: xxx_term_scope
+        index: 20
+      # 备注
+      - name: remark
+        index: 21
+      # 分公司编号
+      - name: xxx_term_bo_code
+        from: xxx_term_bo_name
+        dict: com_organization
+        value_prefix: "有限"
+        mode: name2id
+      # 作业公司编号
+      - name: xxx_term_oper_code
+        from: xxx_term_oper_name
+        dict: com_organization
+        mode: name2id
+      # 油(气)田编号
+      - name: xxx_term_ogf_code
+        from: xxx_term_ogf_name
+        dict: com_ogf_reg
+        mode: name2id
+      # 所属阶段编码
+      - name: xxx_of_stage_code
+        from: xxx_term_scope
+        dict: xeq_business_phase
+        mode: name2id
+      # 设施类型名称
+      - name: xxx_term_typ_name
+        mode: type_name
+      # 设备类型编码
+      - name: xxx_term_typ_code
+        mode: type_code
+      # 主数据id
+      - name: id
+        mode: copy
+        to: xxx_id
+  
